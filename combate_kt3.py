@@ -1,132 +1,139 @@
+
 import streamlit as st
 
-st.set_page_config(page_title="Simulador Cuerpo a Cuerpo Kill Team 3", layout="wide")
+st.set_page_config(layout="wide")
 
-st.title("⚔️ Simulador de Combate Cuerpo a Cuerpo - Kill Team 3")
+st.title("Simulador de Combate - Kill Team 3")
 
+# Utilidades
+def mostrar_exitos(nombre, n_normales, n_criticos):
+    st.markdown(f"**{nombre}** 🎯")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.write("Normales:")
+        st.write(" ".join(["🎯"] * n_normales))
+    with col2:
+        st.write("Críticos:")
+        st.write(" ".join(["💥"] * n_criticos))
+
+def mostrar_accion(turno, quien, accion, tipo):
+    simbolo = "💥" if accion == "golpea" else "🛡️"
+    color = "🟥" if quien == "Atacante" else "🟦"
+    texto = f"{turno+1}. {color} {quien} {simbolo} ({tipo})"
+    st.markdown(texto)
+
+# Entrada de datos
 col1, col2 = st.columns(2)
 
 with col1:
-    st.header("🟥 Atacante")
-    atacante_normales = st.number_input("Éxitos normales", min_value=0, value=2, key="a_n")
-    atacante_criticos = st.number_input("Éxitos críticos", min_value=0, value=1, key="a_c")
-    atacante_vida = st.number_input("Vida restante", min_value=1, value=8, key="a_v")
-    atacante_daño_normal = st.number_input("Daño por normal", min_value=1, value=3, key="a_dn")
-    atacante_daño_critico = st.number_input("Daño por crítico", min_value=1, value=5, key="a_dc")
+    st.header("🤺 Atacante")
+    vida_atacante = st.number_input("Vida Atacante", 1, 20, 10, key="va")
+    daño_normal_a = st.number_input("Daño normal", 1, 10, 3, key="dna")
+    daño_critico_a = st.number_input("Daño crítico", 1, 10, 5, key="dca")
+    st.markdown("**Éxitos**")
+    an, ac = st.columns(2)
+    with an:
+        normales_a = st.number_input("🎯 Normales", 0, 5, 2, key="na")
+    with ac:
+        criticos_a = st.number_input("💥 Críticos", 0, 5, 1, key="ca")
 
 with col2:
-    st.header("🟦 Defensor")
-    defensor_normales = st.number_input("Éxitos normales", min_value=0, value=2, key="d_n")
-    defensor_criticos = st.number_input("Éxitos críticos", min_value=0, value=1, key="d_c")
-    defensor_vida = st.number_input("Vida restante", min_value=1, value=8, key="d_v")
-    defensor_daño_normal = st.number_input("Daño por normal", min_value=1, value=3, key="d_dn")
-    defensor_daño_critico = st.number_input("Daño por crítico", min_value=1, value=5, key="d_dc")
+    st.header("🛡️ Defensor")
+    vida_defensor = st.number_input("Vida Defensor", 1, 20, 10, key="vd")
+    daño_normal_d = st.number_input("Daño normal", 1, 10, 3, key="dnd")
+    daño_critico_d = st.number_input("Daño crítico", 1, 10, 5, key="dcd")
+    st.markdown("**Éxitos**")
+    dn, dc = st.columns(2)
+    with dn:
+        normales_d = st.number_input("🎯 Normales", 0, 5, 2, key="nd")
+    with dc:
+        criticos_d = st.number_input("💥 Críticos", 0, 5, 1, key="cd")
 
-estrategia = st.selectbox("🎯 Estrategia", ["Máximo daño", "Defensiva", "Mejor resultado"])
+estrategia = st.selectbox("Estrategia", ["Máximo daño", "Defensiva", "Mejor resultado"])
 
-if st.button("💥 Resolver combate"):
-    log = []
-    vida_atacante = atacante_vida
-    vida_defensor = defensor_vida
+if st.button("Simular combate"):
+    acciones = []
+    turno = 0
 
-    pool_atacante = [{"tipo": "critico", "daño": atacante_daño_critico}] * atacante_criticos + \
-                    [{"tipo": "normal", "daño": atacante_daño_normal}] * atacante_normales
-    pool_defensor = [{"tipo": "critico", "daño": defensor_daño_critico}] * defensor_criticos + \
-                    [{"tipo": "normal", "daño": defensor_daño_normal}] * defensor_normales
+    # Inicializar estructuras de datos
+    pool = {
+        "Atacante": {"n": int(normales_a), "c": int(criticos_a), "vida": int(vida_atacante),
+                     "d_n": int(daño_normal_a), "d_c": int(daño_critico_a)},
+        "Defensor": {"n": int(normales_d), "c": int(criticos_d), "vida": int(vida_defensor),
+                     "d_n": int(daño_normal_d), "d_c": int(daño_critico_d)}
+    }
 
-    pool_atacante.sort(key=lambda x: 0 if x["tipo"] == "critico" else 1)
-    pool_defensor.sort(key=lambda x: 0 if x["tipo"] == "critico" else 1)
+    orden = ["Atacante", "Defensor"]
+    i = 0  # índice de alternancia
 
-    turno_atacante = True
-    i_a, i_d = 0, 0
-    used_a, used_d = set(), set()
+    while (pool["Atacante"]["n"] + pool["Atacante"]["c"] > 0 or pool["Defensor"]["n"] + pool["Defensor"]["c"] > 0) and pool["Atacante"]["vida"] > 0 and pool["Defensor"]["vida"] > 0:
+        actual = orden[i % 2]
+        rival = orden[(i + 1) % 2]
+        golpeado = False
+        bloqueado = False
 
-    def puede_bloquear(bloqueador, rival, idx_b, tipo_rival):
-        for i, d in enumerate(bloqueador):
-            if i in used_d: continue
-            if d["tipo"] == "critico" or (d["tipo"] == "normal" and tipo_rival == "normal"):
-                used_d.add(i)
-                log.append(f"🟦🛡️ Defensor bloquea {tipo_rival} del atacante.")
-                return True
-        return False
-
-    def bloquear(pool_self, pool_rival, used_self, tipo):
-        for i, dado in enumerate(pool_self):
-            if i in used_self: continue
-            if dado["tipo"] == tipo:
-                used_self.add(i)
-                return True
-        return False
-
-    while len(used_a) < len(pool_atacante) or len(used_d) < len(pool_defensor):
-        if turno_atacante:
-            for i, dado in enumerate(pool_atacante):
-                if i in used_a: continue
-                bloqueado = False
-                if estrategia == "Defensiva":
-                    bloqueado = puede_bloquear(pool_defensor, pool_atacante, i, dado["tipo"])
-                elif estrategia == "Máximo daño":
-                    vida_defensor -= dado["daño"]
-                    used_a.add(i)
-                    log.append(f"🟥💥 Atacante golpea con {dado['tipo']} ({dado['daño']} daño). Vida defensor: {max(0, vida_defensor)}")
-                    if vida_defensor <= 0:
-                        log.append("☠️ ¡El defensor ha muerto!")
-                        break
-                elif estrategia == "Mejor resultado":
-                    # Bloquea si tiene críticos disponibles y el defensor aún tiene éxitos
-                    if vida_defensor - dado["daño"] > 0 and puede_bloquear(pool_defensor, pool_atacante, i, dado["tipo"]):
-                        bloqueado = True
-                    else:
-                        vida_defensor -= dado["daño"]
-                        log.append(f"🟥💥 Atacante golpea con {dado['tipo']} ({dado['daño']} daño). Vida defensor: {max(0, vida_defensor)}")
-                    used_a.add(i)
-                    if vida_defensor <= 0:
-                        log.append("☠️ ¡El defensor ha muerto!")
-                        break
-                if not bloqueado and estrategia == "Defensiva":
-                    vida_defensor -= dado["daño"]
-                    used_a.add(i)
-                    log.append(f"🟥💥 Atacante golpea con {dado['tipo']} ({dado['daño']} daño). Vida defensor: {max(0, vida_defensor)}")
-                    if vida_defensor <= 0:
-                        log.append("☠️ ¡El defensor ha muerto!")
-                        break
-            turno_atacante = False
+        # Seleccionar qué éxito usar
+        tipo = None
+        if pool[actual]["c"] > 0:
+            tipo = "c"
+        elif pool[actual]["n"] > 0:
+            tipo = "n"
         else:
-            for i, dado in enumerate(pool_defensor):
-                if i in used_d: continue
-                bloqueado = False
-                if estrategia == "Máximo daño":
-                    bloqueado = puede_bloquear(pool_atacante, pool_defensor, i, dado["tipo"])
-                elif estrategia == "Defensiva":
-                    vida_atacante -= dado["daño"]
-                    used_d.add(i)
-                    log.append(f"🟦💥 Defensor golpea con {dado['tipo']} ({dado['daño']} daño). Vida atacante: {max(0, vida_atacante)}")
-                    if vida_atacante <= 0:
-                        log.append("☠️ ¡El atacante ha muerto!")
-                        break
-                elif estrategia == "Mejor resultado":
-                    if vida_atacante - dado["daño"] > 0 and puede_bloquear(pool_atacante, pool_defensor, i, dado["tipo"]):
-                        bloqueado = True
-                    else:
-                        vida_atacante -= dado["daño"]
-                        used_d.add(i)
-                        log.append(f"🟦💥 Defensor golpea con {dado['tipo']} ({dado['daño']} daño). Vida atacante: {max(0, vida_atacante)}")
-                        if vida_atacante <= 0:
-                            log.append("☠️ ¡El atacante ha muerto!")
-                            break
-                if not bloqueado and estrategia == "Máximo daño":
-                    vida_atacante -= dado["daño"]
-                    used_d.add(i)
-                    log.append(f"🟦💥 Defensor golpea con {dado['tipo']} ({dado['daño']} daño). Vida atacante: {max(0, vida_atacante)}")
-                    if vida_atacante <= 0:
-                        log.append("☠️ ¡El atacante ha muerto!")
-                        break
-            turno_atacante = True
+            i += 1
+            continue
 
-        if vida_atacante <= 0 or vida_defensor <= 0:
+        # Según estrategia decidir qué hacer
+        bloquear = False
+
+        if estrategia == "Defensiva":
+            if pool[rival]["c"] > 0:
+                pool[rival]["c"] -= 1
+                bloqueado = True
+            elif pool[rival]["n"] > 0:
+                pool[rival]["n"] -= 1
+                bloqueado = True
+        elif estrategia == "Máximo daño":
+            bloquear = False
+        elif estrategia == "Mejor resultado":
+            # Prioriza bloquear si puede sobrevivir para pegar más
+            daño_total_rival = pool[rival]["c"] * pool[rival]["d_c"] + pool[rival]["n"] * pool[rival]["d_n"]
+            daño_total_actual = pool[actual]["c"] * pool[actual]["d_c"] + pool[actual]["n"] * pool[actual]["d_n"]
+
+            if daño_total_rival >= pool[actual]["vida"] and (pool[rival]["c"] > 0 or pool[rival]["n"] > 0):
+                bloquear = True
+                if pool[rival]["c"] > 0:
+                    pool[rival]["c"] -= 1
+                    bloqueado = True
+                elif pool[rival]["n"] > 0:
+                    pool[rival]["n"] -= 1
+                    bloqueado = True
+
+        if not bloqueado:
+            dmg = pool[actual]["d_c"] if tipo == "c" else pool[actual]["d_n"]
+            pool[rival]["vida"] -= dmg
+            golpeado = True
+
+        pool[actual][tipo] -= 1
+
+        if golpeado:
+            mostrar_accion(turno, actual, "golpea", "💥" if tipo == "c" else "🎯")
+        elif bloqueado:
+            mostrar_accion(turno, actual, "bloquea", "💥" if tipo == "c" else "🎯")
+
+        turno += 1
+        i += 1
+
+        # Si muere uno, termina
+        if pool["Atacante"]["vida"] <= 0 or pool["Defensor"]["vida"] <= 0:
             break
 
-    st.subheader("🔎 Resultado del combate:")
-    for linea in log:
-        st.markdown(linea)
-        
+    # Mostrar resultado final
+    st.markdown("---")
+    if pool["Atacante"]["vida"] <= 0 and pool["Defensor"]["vida"] <= 0:
+        st.error("💀 Ambos combatientes han muerto.")
+    elif pool["Atacante"]["vida"] <= 0:
+        st.error("💀 El Atacante ha muerto.")
+    elif pool["Defensor"]["vida"] <= 0:
+        st.success("🎯 ¡El Atacante ha matado al Defensor!")
+    else:
+        st.info("⚔️ Ambos sobreviven.")

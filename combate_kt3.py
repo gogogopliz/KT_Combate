@@ -1,6 +1,5 @@
 
 import streamlit as st
-from itertools import permutations
 
 st.set_page_config(page_title="Kill Team 3 - Cuerpo a Cuerpo", layout="centered")
 
@@ -10,23 +9,35 @@ st.markdown("Marca los éxitos de cada combatiente y define tus prioridades estr
 
 st.header("🎲 Resultados de Dados")
 
+def contador(label, key):
+    col1, col2, col3 = st.columns([1, 1, 2])
+    with col1:
+        if st.button("➖", key=key + "_menos"):
+            st.session_state[key] = max(0, st.session_state.get(key, 0) - 1)
+    with col2:
+        if st.button("➕", key=key + "_mas"):
+            st.session_state[key] = st.session_state.get(key, 0) + 1
+    with col3:
+        st.markdown(f"**{label}:** {st.session_state.get(key, 0)}")
+    return st.session_state.get(key, 0)
+
 col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("Atacante")
-    atk_normals = st.slider("Éxitos normales", 0, 5, 2)
-    atk_crits = st.slider("Éxitos críticos", 0, 5, 1)
-    atk_dmg = st.number_input("Daño normal", 1, 10, 3)
-    atk_critdmg = st.number_input("Daño crítico", 1, 12, 5)
-    atk_wounds = st.number_input("Vida restante", 1, 30, 10)
+    atk_normals = contador("Éxitos normales", "atk_normals")
+    atk_crits = contador("Éxitos críticos", "atk_crits")
+    atk_dmg = st.number_input("Daño normal", 1, 10, 3, key="atk_dmg")
+    atk_critdmg = st.number_input("Daño crítico", 1, 12, 5, key="atk_crit")
+    atk_wounds = st.number_input("Vida restante", 1, 30, 10, key="atk_w")
 
 with col2:
     st.subheader("Defensor")
-    def_normals = st.slider("Éxitos normales", 0, 5, 2)
-    def_crits = st.slider("Éxitos críticos", 0, 5, 1)
-    def_dmg = st.number_input("Daño normal (def)", 1, 10, 3)
-    def_critdmg = st.number_input("Daño crítico (def)", 1, 12, 5)
-    def_wounds = st.number_input("Vida restante (def)", 1, 30, 10)
+    def_normals = contador("Éxitos normales", "def_normals")
+    def_crits = contador("Éxitos críticos", "def_crits")
+    def_dmg = st.number_input("Daño normal (def)", 1, 10, 3, key="def_dmg")
+    def_critdmg = st.number_input("Daño crítico (def)", 1, 12, 5, key="def_crit")
+    def_wounds = st.number_input("Vida restante (def)", 1, 30, 10, key="def_w")
 
 st.header("🎯 Objetivo de la resolución")
 objective = st.radio("¿Qué quieres priorizar?", [

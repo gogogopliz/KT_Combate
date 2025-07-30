@@ -1,129 +1,86 @@
 
 import streamlit as st
 
-st.set_page_config(page_title="Kill Team Cuerpo a Cuerpo", layout="centered")
+st.set_page_config(page_title="Simulador Cuerpo a Cuerpo KT3", layout="wide")
+st.title("⚔️ Simulador Cuerpo a Cuerpo - Kill Team 2024")
 
-st.title("⚔️ Kill Team - Cuerpo a Cuerpo")
+st.markdown("Ajusta los dados y compara los resultados. Cada éxito puede infligir daño o cancelar un éxito enemigo.")
 
-st.markdown("Cada éxito puede 💥 golpear o 🛡️ bloquear. Elige dados, prioridades y obtén la mejor secuencia.")
-
-def contador(label, key):
-    c1, c2, c3 = st.columns([1, 1, 2])
-    with c1:
-        if st.button("-", key=key+"_menos"):
-            st.session_state[key] = max(0, st.session_state.get(key, 0) - 1)
-    with c2:
-        if st.button("+", key=key+"_mas"):
-            st.session_state[key] = st.session_state.get(key, 0) + 1
-    with c3:
-        st.markdown(f"{label}: **{st.session_state.get(key, 0)}**")
-    return st.session_state.get(key, 0)
-
-# Compact layout
+# --- Inputs compactos ---
 col1, col2 = st.columns(2)
 with col1:
-    st.subheader("Atacante")
-    atk_c = contador("Críticos", "atk_c")
-    atk_n = contador("Normales", "atk_n")
-    atk_d = st.number_input("Daño", 1, 10, 3, key="atk_d")
-    atk_cd = st.number_input("Crítico", 1, 12, 5, key="atk_cd")
-    atk_hp = st.number_input("Vida", 1, 30, 10, key="atk_hp")
+    st.subheader("🟥 Atacante")
+    atk_normals = st.number_input("Éxitos normales", 0, 5, 2, key="atk_normals")
+    atk_crits = st.number_input("Éxitos críticos", 0, 5, 1, key="atk_crits")
+    atk_damage = st.number_input("Daño normal", 1, 10, 3, key="atk_damage")
+    atk_crit_damage = st.number_input("Daño crítico", 1, 10, 6, key="atk_crit_damage")
+    atk_wounds = st.number_input("Vida", 1, 30, 10, key="atk_wounds")
 
 with col2:
-    st.subheader("Defensor")
-    def_c = contador("Críticos", "def_c")
-    def_n = contador("Normales", "def_n")
-    def_d = st.number_input("Daño", 1, 10, 3, key="def_d")
-    def_cd = st.number_input("Crítico", 1, 12, 5, key="def_cd")
-    def_hp = st.number_input("Vida", 1, 30, 10, key="def_hp")
+    st.subheader("🟦 Defensor")
+    def_normals = st.number_input("Éxitos normales", 0, 5, 2, key="def_normals")
+    def_crits = st.number_input("Éxitos críticos", 0, 5, 1, key="def_crits")
+    def_damage = st.number_input("Daño normal", 1, 10, 3, key="def_damage")
+    def_crit_damage = st.number_input("Daño crítico", 1, 10, 5, key="def_crit_damage")
+    def_wounds = st.number_input("Vida", 1, 30, 10, key="def_wounds")
 
-st.radio("🎯 Prioridad:", [
-    "🩸 Maximizar daño infligido",
-    "🛡️ Sobrevivir",
-    "☠️ Matar al otro primero"
-], key="objetivo", horizontal=True)
+st.markdown("---")
 
-# Acción posible: (personaje, dado usado, acción: "hit"/"block", objetivo tipo)
-class Accion:
-    def __init__(self, quien, dado, acc, objetivo=None):
-        self.q = quien
-        self.d = dado  # "C" o "N"
-        self.a = acc   # "hit" o "block"
-        self.o = objetivo  # "C" o "N"
+# --- Resolución del combate ---
+def resolver_combate(a_n, a_c, d_n, d_c, a_d, a_cd, d_d, d_cd, v_a, v_d):
+    secuencia = []
+    atk_total = [2] * a_c + [1] * a_n  # 2 = crítico, 1 = normal
+    def_total = [2] * d_c + [1] * d_n
+    atk_total.sort(reverse=True)
+    def_total.sort(reverse=True)
 
-    def icono(self):
-        if self.a == "hit":
-            return f"{self.q} 💥 ({'⚡️' if self.d=='C' else '•'})"
+    i, j = 0, 0
+    while i < len(atk_total) and j < len(def_total):
+        if def_total[j] == 2 and atk_total[i] >= 2:
+            secuencia.append("🟦🛡️ Defensor bloquea crítico atacante")
+            i += 1; j += 1
+        elif def_total[j] >= atk_total[i]:
+            secuencia.append("🟦🛡️ Defensor bloquea ataque")
+            i += 1; j += 1
         else:
-            return f"{self.q} 🛡️ contra {'⚡️' if self.o=='C' else '•'}"
+            break
 
-def simular_combate(ac, an, dc, dn, ad, acd, dd, dcd, ahp, dhp, prioridad):
-    from itertools import permutations
-    from copy import deepcopy
+    # Lo que queda hace daño
+    dmg_a, dmg_d = 0, 0
+    for atk in atk_total[i:]:
+        if atk == 2:
+            secuencia.append("🟥💥 Atacante golpea con crítico")
+            dmg_a += a_cd
+        else:
+            secuencia.append("🟥💥 Atacante golpea")
+            dmg_a += a_d
 
-    a_pool = ['C']*ac + ['N']*an
-    d_pool = ['C']*dc + ['N']*dn
+    for df in def_total[j:]:
+        if df == 2:
+            secuencia.append("🟦💥 Defensor golpea con crítico")
+            dmg_d += d_cd
+        else:
+            secuencia.append("🟦💥 Defensor golpea")
+            dmg_d += d_d
 
-    acciones_posibles = []
+    v_a_final = max(0, v_a - dmg_d)
+    v_d_final = max(0, v_d - dmg_a)
 
-    def aplicar_combate(a_list, d_list):
-        a = deepcopy(a_list)
-        d = deepcopy(d_list)
-        atk = ahp
-        deff = dhp
-        acciones = []
-        turno = [('A', x) for x in a] + [('D', x) for x in d]
-        for q, d_val in turno:
-            pool_ally = a if q == 'A' else d
-            pool_enemy = d if q == 'A' else a
-            if d_val not in pool_ally:
-                continue
-            accion = None
-            if 'C' in pool_enemy:
-                pool_enemy.remove('C')
-                accion = Accion(q, d_val, 'block', 'C')
-            elif 'N' in pool_enemy and d_val == 'C':
-                pool_enemy.remove('N')
-                accion = Accion(q, d_val, 'block', 'N')
-            else:
-                dmg = acd if q == 'A' and d_val == 'C' else ad if q == 'A' else dcd if d_val == 'C' else dd
-                if q == 'A':
-                    deff -= dmg
-                else:
-                    atk -= dmg
-                accion = Accion(q, d_val, 'hit')
-            pool_ally.remove(d_val)
-            acciones.append(accion)
-        return acciones, atk, deff
+    return secuencia, v_a_final, v_d_final, dmg_a, dmg_d
 
-    mejor = None
-    mejor_valor = float('-inf')
-    for orden_a in permutations(a_pool):
-        for orden_d in permutations(d_pool):
-            acciones, va, vd = aplicar_combate(list(orden_a), list(orden_d))
-            if prioridad == "🩸 Maximizar daño infligido":
-                valor = dhp - vd
-            elif prioridad == "🛡️ Sobrevivir":
-                valor = va
-            else:
-                valor = (dhp - vd) - (ahp - va)
-            if valor > mejor_valor:
-                mejor_valor = valor
-                mejor = acciones, va, vd
-    return mejor
+# --- Ejecutar y mostrar resultado ---
+seq, v_a_res, v_d_res, dmg_a, dmg_d = resolver_combate(
+    atk_normals, atk_crits, def_normals, def_crits,
+    atk_damage, atk_crit_damage, def_damage, def_crit_damage,
+    atk_wounds, def_wounds
+)
 
-if st.button("⚔️ Resolver combate"):
-    resultado = simular_combate(
-        st.session_state.get("atk_c", 0), st.session_state.get("atk_n", 0),
-        st.session_state.get("def_c", 0), st.session_state.get("def_n", 0),
-        st.session_state["atk_d"], st.session_state["atk_cd"],
-        st.session_state["def_d"], st.session_state["def_cd"],
-        st.session_state["atk_hp"], st.session_state["def_hp"],
-        st.session_state["objetivo"]
-    )
-    acciones, vida_a, vida_d = resultado
-    st.subheader("🧠 Mejor secuencia:")
-    for acc in acciones:
-        st.markdown(f"- {acc.icono()}")
-    st.markdown(f"🩸 Vida Atacante: **{vida_a}**")
-    st.markdown(f"🛡️ Vida Defensor: **{vida_d}**")
+st.subheader("🧠 Resolución paso a paso")
+for paso in seq:
+    st.markdown(f"- {paso}")
+
+colr1, colr2 = st.columns(2)
+with colr1:
+    st.metric("🟥 Vida restante Atacante", f"{v_a_res} ❤️", delta=-dmg_d)
+with colr2:
+    st.metric("🟦 Vida restante Defensor", f"{v_d_res} ❤️", delta=-dmg_a)
